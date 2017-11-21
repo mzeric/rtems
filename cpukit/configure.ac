@@ -468,6 +468,7 @@ score/cpu/sparc/Makefile
 score/cpu/sparc64/Makefile
 score/cpu/v850/Makefile
 score/cpu/no_cpu/Makefile
+score/cpu/x86_64/Makefile
 posix/Makefile
 libblock/Makefile
 libdrvmgr/Makefile

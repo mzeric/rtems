@@ -43,7 +43,8 @@ void _Thread_Handler( void )
    * inline asm here
    */
   level = executing->Start.isr_level;
-  _ISR_Set_level( level );
+  //_ISR_Set_level( level );
+  printk("_Thread_Handler executing...\n");
 
   /*
    * Initialize the floating point context because we do not come

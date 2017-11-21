@@ -64,6 +64,7 @@ static char *rcsid = "$FreeBSD: src/lib/libc/xdr/xdr_float.c,v 1.7 1999/08/28 00
     defined(__epiphany__) ||  defined(__EPIPHANY__) || \
     defined(__hppa__) || \
     defined(__i386__) || \
+    defined(__x86_64__) || \
     defined(__lm32__) || \
     defined(__m68k__) || defined(__mc68000__) || \
     defined(__mips__) || defined(__moxie__) || \

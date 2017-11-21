@@ -846,10 +846,11 @@ RTEMS_INLINE_ROUTINE Thread_Control *_Thread_Internal_allocate( void )
  * @see _Thread_Dispatch(), _Thread_Start_multitasking() and
  * _Thread_Dispatch_update_heir().
  */
+__attribute__((optimize("-O3")))
 RTEMS_INLINE_ROUTINE Thread_Control *_Thread_Get_heir_and_make_it_executing(
   Per_CPU_Control *cpu_self
-)
-{
+) {
+    printf("get heir:%x\n", cpu_self);
   Thread_Control *heir;
 
   heir = cpu_self->heir;

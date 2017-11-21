@@ -1,0 +1,11 @@
+%rename lib old_lib
+
+*startfile:
+%{!qrtems: %(old_startfile)} \
+%{!nostdlib: %{qrtems: crtbegin.o%s  -e start}}
+
+*lib:
+%{!qrtems: %(old_lib)} \
+%{!nostdlib: %{qrtems: --start-group -lrtemsbsp -lrtemscpu -lc -lgcc --end-group \
+%{!qnolinkcmds: -T linkcmds%s}}}
+

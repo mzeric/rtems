@@ -1,0 +1,1371 @@
+/**
+ * @file rtems/score/cpu.h
+ *
+ * @brief NO_CPU Department Source
+ *
+ * This include file contains information pertaining to the NO_CPU
+ * processor.
+ */
+
+/*
+ *  This include file contains information pertaining to the XXX
+ *  processor.
+ *
+ *  @note This file is part of a porting template that is intended
+ *  to be used as the starting point when porting RTEMS to a new
+ *  CPU family.  The following needs to be done when using this as
+ *  the starting point for a new port:
+ *
+ *  + Anywhere there is an XXX, it should be replaced
+ *    with information about the CPU family being ported to.
+ *
+ *  + At the end of each comment section, there is a heading which
+ *    says "Port Specific Information:".  When porting to RTEMS,
+ *    add CPU family specific information in this section
+ */
+
+/*
+ *  COPYRIGHT (c) 1989-2008.
+ *  On-Line Applications Research Corporation (OAR).
+ *
+ *  The license and distribution terms for this file may be
+ *  found in the file LICENSE in this distribution or at
+ *  http://www.rtems.org/license/LICENSE.
+ */
+
+#ifndef _RTEMS_SCORE_CPU_H
+#define _RTEMS_SCORE_CPU_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <rtems/score/types.h>
+#include <rtems/score/x86_64.h>
+
+
+ 
+#define CPU_HAS_SOFTWARE_INTERRUPT_STACK TRUE
+
+#define CPU_SIMPLE_VECTORED_INTERRUPTS FALSE
+
+
+#define CPU_HAS_HARDWARE_INTERRUPT_STACK FALSE
+
+
+#define CPU_ALLOCATE_INTERRUPT_STACK TRUE
+
+
+#define CPU_ISR_PASSES_FRAME_POINTER FALSE
+
+#ifdef __SSE__
+#define CPU_HARDWARE_FP                  TRUE
+#define CPU_SOFTWARE_FP                  FALSE
+
+#define CPU_ALL_TASKS_ARE_FP             TRUE
+#define CPU_IDLE_TASK_IS_FP              TRUE
+#define CPU_USE_DEFERRED_FP_SWITCH       FALSE
+#else /* __SSE__ */
+
+#if ( I386_HAS_FPU == 1 )
+#define CPU_HARDWARE_FP     TRUE    /* i387 for i386 */
+#else
+#define CPU_HARDWARE_FP     FALSE
+#endif
+#define CPU_SOFTWARE_FP     FALSE
+
+#define CPU_ALL_TASKS_ARE_FP             FALSE
+#define CPU_IDLE_TASK_IS_FP              FALSE
+#if defined(RTEMS_SMP)
+  #define CPU_USE_DEFERRED_FP_SWITCH     FALSE
+#else
+  #define CPU_USE_DEFERRED_FP_SWITCH     TRUE
+#endif
+#endif /* __SSE__ */
+/**
+ * Are all tasks RTEMS_FLOATING_POINT tasks implicitly?
+ *
+ * If TRUE, then the RTEMS_FLOATING_POINT task attribute is assumed.
+ * If FALSE, then the RTEMS_FLOATING_POINT task attribute is followed.
+ *
+ * So far, the only CPUs in which this option has been used are the
+ * HP PA-RISC and PowerPC.  On the PA-RISC, The HP C compiler and
+ * gcc both implicitly used the floating point registers to perform
+ * integer multiplies.  Similarly, the PowerPC port of gcc has been
+ * seen to allocate floating point local variables and touch the FPU
+ * even when the flow through a subroutine (like vfprintf()) might
+ * not use floating point formats.
+ *
+ * If a function which you would not think utilize the FP unit DOES,
+ * then one can not easily predict which tasks will use the FP hardware.
+ * In this case, this option should be TRUE.
+ *
+ * If @ref CPU_HARDWARE_FP is FALSE, then this should be FALSE as well.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+//#define CPU_ALL_TASKS_ARE_FP     TRUE
+
+
+
+#define CPU_ENABLE_ROBUST_THREAD_DISPATCH FALSE
+
+
+#define CPU_PROVIDES_IDLE_THREAD_BODY    FALSE
+
+#define CPU_STACK_GROWS_UP               FALSE
+
+/**
+ * The maximum cache line size in bytes.
+ *
+ * The actual processor may use no cache or a smaller cache line size.
+ */
+#define CPU_CACHE_LINE_BYTES 64
+
+/**
+ * The following is the variable attribute used to force alignment
+ * of critical RTEMS structures.  On some processors it may make
+ * sense to have these aligned on tighter boundaries than
+ * the minimum requirements of the compiler in order to have as
+ * much of the critical data area as possible in a cache line.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define CPU_STRUCTURE_ALIGNMENT RTEMS_ALIGNED( CPU_CACHE_LINE_BYTES )
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * The following defines the number of bits actually used in the
+ * interrupt field of the task mode.  How those bits map to the
+ * CPU interrupt levels is defined by the routine @ref _CPU_ISR_Set_level.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define CPU_MODES_INTERRUPT_LEVEL  0x00000001
+#define CPU_MODES_INTERRUPT_MASK   0x00000001
+
+/**
+ * @brief Maximum number of processors of all systems supported by this CPU
+ * port.
+ */
+#define CPU_MAXIMUM_PROCESSORS 32
+
+/*
+ *  Processor defined structures required for cpukit/score.
+ *
+ *  Port Specific Information:
+ *
+ *  XXX document implementation including references if appropriate
+ */
+
+/* may need to put some structures here.  */
+
+/**
+ * @defgroup CPUContext Processor Dependent Context Management
+ *
+ * From the highest level viewpoint, there are 2 types of context to save.
+ *
+ *    -# Interrupt registers to save
+ *    -# Task level registers to save
+ *
+ * Since RTEMS handles integer and floating point contexts separately, this
+ * means we have the following 3 context items:
+ *
+ *    -# task level context stuff::  Context_Control
+ *    -# floating point task stuff:: Context_Control_fp
+ *    -# special interrupt level context :: CPU_Interrupt_frame
+ *
+ * On some processors, it is cost-effective to save only the callee
+ * preserved registers during a task context switch.  This means
+ * that the ISR code needs to save those registers which do not
+ * persist across function calls.  It is not mandatory to make this
+ * distinctions between the caller/callee saves registers for the
+ * purpose of minimizing context saved during task switch and on interrupts.
+ * If the cost of saving extra registers is minimal, simplicity is the
+ * choice.  Save the same context on interrupt entry as for tasks in
+ * this case.
+ *
+ * Additionally, if gdb is to be made aware of RTEMS tasks for this CPU, then
+ * care should be used in designing the context area.
+ *
+ * On some CPUs with hardware floating point support, the Context_Control_fp
+ * structure will not be used or it simply consist of an array of a
+ * fixed number of bytes.   This is done when the floating point context
+ * is dumped by a "FP save context" type instruction and the format
+ * is not really defined by the CPU.  In this case, there is no need
+ * to figure out the exact format -- only the size.  Of course, although
+ * this is enough information for RTEMS, it is probably not enough for
+ * a debugger such as gdb.  But that is another problem.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ * 
+ */
+/**@{**/
+/**
+ * Amount of extra stack (above minimum stack size) required by
+ * MPCI receive server thread.  Remember that in a multiprocessor
+ * system this thread must exist and be able to process all directives.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define CPU_MPCI_RECEIVE_SERVER_EXTRA_STACK 1024
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * This defines the number of entries in the _ISR_Vector_table managed by RTEMS
+ * in case CPU_SIMPLE_VECTORED_INTERRUPTS is defined to TRUE.  It must be a
+ * compile-time constant.
+ *
+ * It must be undefined in case CPU_SIMPLE_VECTORED_INTERRUPTS is defined to
+ * FALSE.
+ */
+//#define CPU_INTERRUPT_NUMBER_OF_VECTORS      32
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * This defines the highest interrupt vector number for this port in case
+ * CPU_SIMPLE_VECTORED_INTERRUPTS is defined to TRUE.  It must be less than
+ * CPU_INTERRUPT_NUMBER_OF_VECTORS.  It may be not a compile-time constant.
+ *
+ * It must be undefined in case CPU_SIMPLE_VECTORED_INTERRUPTS is defined to
+ * FALSE.
+ */
+//#define CPU_INTERRUPT_MAXIMUM_VECTOR_NUMBER  (CPU_INTERRUPT_NUMBER_OF_VECTORS - 1)
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * This is defined if the port has a special way to report the ISR nesting
+ * level.  Most ports maintain the variable @a _ISR_Nest_level.
+ */
+#define CPU_PROVIDES_ISR_IS_IN_PROGRESS FALSE
+
+/**
+ * @ingroup CPUContext
+ * 
+ * Should be large enough to run all RTEMS tests.  This ensures
+ * that a "reasonable" small application should not have any problems.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define CPU_STACK_MINIMUM_SIZE          (1024*4)
+
+/**
+ * Size of a pointer.
+ *
+ * This must be an integer literal that can be used by the assembler.  This
+ * value will be used to calculate offsets of structure members.  These
+ * offsets will be used in assembler code.
+ */
+#define CPU_SIZEOF_POINTER         8
+
+/**
+ * CPU's worst alignment requirement for data types on a byte boundary.  This
+ * alignment does not take into account the requirements for the stack.  It
+ * must be a power of two greater than or equal to two.  The power of two
+ * requirement makes it possible to align values easily using simple bit
+ * operations.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define CPU_ALIGNMENT              8
+
+/**
+ * This number corresponds to the byte alignment requirement for the
+ * heap handler.  This alignment requirement may be stricter than that
+ * for the data types alignment specified by @ref CPU_ALIGNMENT.  It is
+ * common for the heap to follow the same alignment requirement as
+ * @ref CPU_ALIGNMENT.  If the @ref CPU_ALIGNMENT is strict enough for
+ * the heap, then this should be set to @ref CPU_ALIGNMENT.
+ *
+ * NOTE:  It must be a power of two greater than or equal to two.  The
+ *        requirement to be a multiple of two is because the heap uses the
+ *        least significant field of the front and back flags to indicate that
+ *        a block is in use or free.  So you do not want any odd length blocks
+ *        really putting length data in that bit.
+ *
+ *        On byte oriented architectures, @ref CPU_HEAP_ALIGNMENT normally will
+ *        have to be greater or equal to than @ref CPU_ALIGNMENT to ensure that
+ *        elements allocated from the heap meet all restrictions.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define CPU_HEAP_ALIGNMENT         CPU_ALIGNMENT
+
+/**
+ * This number corresponds to the byte alignment requirement for memory
+ * buffers allocated by the partition manager.  This alignment requirement
+ * may be stricter than that for the data types alignment specified by
+ * @ref CPU_ALIGNMENT.  It is common for the partition to follow the same
+ * alignment requirement as @ref CPU_ALIGNMENT.  If the @ref CPU_ALIGNMENT is
+ * strict enough for the partition, then this should be set to
+ * @ref CPU_ALIGNMENT.
+ *
+ * NOTE:  This does not have to be a power of 2.  It does have to
+ *        be greater or equal to than @ref CPU_ALIGNMENT.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define CPU_PARTITION_ALIGNMENT    CPU_ALIGNMENT
+
+/**
+ * This number corresponds to the byte alignment requirement for the
+ * stack.  This alignment requirement may be stricter than that for the
+ * data types alignment specified by @ref CPU_ALIGNMENT.  If the
+ * @ref CPU_ALIGNMENT is strict enough for the stack, then this should be
+ * set to 0.
+ *
+ * NOTE: This must be a power of 2 either 0 or greater than @ref CPU_ALIGNMENT.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define CPU_STACK_ALIGNMENT        16
+
+/**
+ * This definition is set to TRUE if the port uses the generic bitfield
+ * manipulation implementation.
+ */
+#define CPU_USE_GENERIC_BITFIELD_CODE TRUE
+/**
+ * @ingroup Management
+ * This defines the minimal set of integer and processor state registers
+ * that must be saved during a voluntary context switch from one thread
+ * to another.
+ */
+#define X64_CONTEXT_CONTROL_RFLAGS_OFFSET 0
+#define X64_CONTEXT_CONTROL_RSP_OFFSET (0x8)
+#define X64_CONTEXT_CONTROL_RBP_OFFSET (0x8*2)
+#define X64_CONTEXT_CONTROL_RBX_OFFSET (0x8*3)
+#define X64_CONTEXT_CONTROL_RSI_OFFSET (0x8*4)
+#define X64_CONTEXT_CONTROL_RDI_OFFSET (0x8*5)
+#define X64_CONTEXT_CONTROL_GS_OFFSET  (0x8*6)
+
+#ifndef ASM
+typedef struct {
+    /**
+     * This field is a hint that a port will have a number of integer
+     * registers that need to be saved at a context switch.
+     */
+    uint64_t    rflags;
+    void        *rsp;
+    void        *rbp;
+    uint64_t    rbx;
+    uint64_t    rdi;
+    uint64_t    rsi;
+    /**
+     * This field is a hint that a port will have a number of system
+     * registers that need to be saved at a context switch.
+     */
+    segment_descriptor  gs;
+
+#ifdef RTEMS_SMP
+
+    volatile bool is_executing;
+#endif
+} Context_Control;
+
+#define _CPU_Context_Get_SP( _context ) \
+  (_context)->rsp
+
+#ifdef RTEMS_SMP
+  static inline bool _CPU_Context_Get_is_executing(
+    const Context_Control *context
+  )
+  {
+    return context->is_executing;
+  }
+
+  static inline void _CPU_Context_Set_is_executing(
+    Context_Control *context,
+    bool is_executing
+  )
+  {
+    context->is_executing = is_executing;
+  }
+#endif
+/**
+ * @ingroup Management
+ * 
+ * This defines the complete set of floating point registers that must
+ * be saved during any context switch from one thread to another.
+ */
+/*
+ *  FP context save area for the i387 numeric coprocessors.
+ */
+#ifdef __SSE__
+/* All FPU and SSE registers are volatile; hence, as long
+ * as we are within normally executing C code (including
+ * a task switch) there is no need for saving/restoring
+ * any of those registers.
+ * We must save/restore the full FPU/SSE context across
+ * interrupts and exceptions, however:
+ *   -  after ISR execution a _Thread_Dispatch() may happen
+ *      and it is therefore necessary to save the FPU/SSE
+ *      registers to be restored when control is returned
+ *      to the interrupted task.
+ *   -  gcc may implicitly use FPU/SSE instructions in
+ *      an ISR.
+ *
+ * Even though there is no explicit mentioning of the FPU
+ * control word in the SYSV ABI (i386) being non-volatile
+ * we maintain MXCSR and the FPU control-word for each task.
+ */
+typedef struct {
+    uint32_t  mxcsr;
+    uint16_t  fpucw;
+} Context_Control_fp;
+
+#else
+
+typedef struct {
+  uint8_t     fp_save_area[108];    /* context size area for I80387 */
+                                    /*  28 bytes for environment    */
+} Context_Control_fp;
+#endif
+/**
+ * @ingroup Management
+ * 
+ * This defines the set of integer and processor state registers that must
+ * be saved during an interrupt.  This set does not include any which are
+ * in @ref Context_Control.
+ */
+typedef void CPU_Interrupt_frame;
+
+/**
+ * This variable is optional.  It is used on CPUs on which it is difficult
+ * to generate an "uninitialized" FP context.  It is filled in by
+ * @ref _CPU_Initialize and copied into the task's FP context area during
+ * @ref _CPU_Context_Initialize.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+extern Context_Control_fp _CPU_Null_fp_context;
+
+/** @} */
+
+/**
+ * @defgroup CPUInterrupt Processor Dependent Interrupt Management
+ *
+ * On some CPUs, RTEMS supports a software managed interrupt stack.
+ * This stack is allocated by the Interrupt Manager and the switch
+ * is performed in @ref _ISR_Handler.  These variables contain pointers
+ * to the lowest and highest addresses in the chunk of memory allocated
+ * for the interrupt stack.  Since it is unknown whether the stack
+ * grows up or down (in general), this give the CPU dependent
+ * code the option of picking the version it wants to use.
+ *
+ * NOTE: These two variables are required if the macro
+ *       @ref CPU_HAS_SOFTWARE_INTERRUPT_STACK is defined as TRUE.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+
+/*
+ *  Nothing prevents the porter from declaring more CPU specific variables.
+ *
+ *  Port Specific Information:
+ *
+ *  XXX document implementation including references if appropriate
+ */
+
+/* XXX: if needed, put more variables here */
+
+/**
+ * @ingroup CPUContext
+ * 
+ * The size of the floating point context area.  On some CPUs this
+ * will not be a "sizeof" because the format of the floating point
+ * area is not defined -- only the size is.  This is usually on
+ * CPUs with a "floating point save context" instruction.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define CPU_CONTEXT_FP_SIZE sizeof( Context_Control_fp )
+
+
+/*
+ *  ISR handler macros
+ */
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * Support routine to initialize the RTEMS vector table after it is allocated.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define _CPU_Initialize_vectors()
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * Disable all interrupts for an RTEMS critical section.  The previous
+ * level is returned in @a _isr_cookie.
+ *
+ * @param[out] _isr_cookie will contain the previous level cookie
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define _CPU_ISR_Disable( _level ) \
+  do{ \
+        uint64_t _tmp; \
+    __asm__ volatile ( "pushf ; \
+                    cli ; \
+                    pop %0" \
+                   : "=rm" ((_tmp)) \
+    ); \
+    _level = (ISR_Level)_tmp; \
+  }while(0)
+
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * Enable interrupts to the previous level (returned by _CPU_ISR_Disable).
+ * This indicates the end of an RTEMS critical section.  The parameter
+ * @a _isr_cookie is not modified.
+ *
+ * @param[in] _isr_cookie contain the previous level cookie
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define _CPU_ISR_Enable( _level )  \
+  do{ \
+    uint64_t _tmp = (uint64_t)_level; \
+    __asm__ volatile ( "push %0 ; \
+                    popf" \
+                    : : "rm" ((_tmp)) : "cc" \
+    ); \
+  }while(0)
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * This temporarily restores the interrupt to @a _isr_cookie before immediately
+ * disabling them again.  This is used to divide long RTEMS critical
+ * sections into two or more parts.  The parameter @a _isr_cookie is not
+ * modified.
+ *
+ * @param[in] _isr_cookie contain the previous level cookie
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define _CPU_ISR_Flash( _level ) \
+  do { \
+    uint64_t _tmp; \
+    __asm__ volatile ( "push %0 ; \
+                    popf ; \
+                    cli" \
+                    : : "rm" ((_tmp)) : "cc" \
+                    );\
+    _level = (ISR_Level)_tmp; \
+  }while(0)
+
+/**
+ * @brief Returns true if interrupts are enabled in the specified ISR level,
+ * otherwise returns false.
+ *
+ * @param[in] level The ISR level.
+ *
+ * @retval true Interrupts are enabled in the ISR level.
+ * @retval false Otherwise.
+ */
+RTEMS_INLINE_ROUTINE bool _CPU_ISR_Is_enabled( uint32_t level )
+{
+  return ( level & 0x200 ) != 0;
+}
+
+/**
+ * @ingroup CPUInterrupt
+ *
+ * This routine and @ref _CPU_ISR_Get_level
+ * Map the interrupt level in task mode onto the hardware that the CPU
+ * actually provides.  Currently, interrupt levels which do not
+ * map onto the CPU in a generic fashion are undefined.  Someday,
+ * it would be nice if these were "mapped" by the application
+ * via a callout.  For example, m68k has 8 levels 0 - 7, levels
+ * 8 - 255 would be available for bsp/application specific meaning.
+ * This could be used to manage a programmable interrupt controller
+ * via the rtems_task_mode directive.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define _CPU_ISR_Set_level( _new_level ) \
+  { \
+    if ( _new_level ) __asm__ volatile ( "cli" ); \
+    else              __asm__ volatile ( "sti" ); \
+  }
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * Return the current interrupt disable level for this task in
+ * the format used by the interrupt level portion of the task mode.
+ *
+ * NOTE: This routine usually must be implemented as a subroutine.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+uint32_t   _CPU_ISR_Get_level( void );
+
+/* end of ISR handler macros */
+
+/* Context handler macros */
+
+/**
+ * @ingroup CPUContext
+ *
+ * @brief Destroys the context of the thread.
+ *
+ * It must be implemented as a macro and an implementation is optional.  The
+ * default implementation does nothing.
+ *
+ * @param[in] _the_thread The corresponding thread.
+ * @param[in] _the_context The context to destroy.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define _CPU_Context_Destroy( _the_thread, _the_context ) \
+  { \
+  }
+
+/**
+ *  @ingroup CPUContext
+ * 
+ * Initialize the context to a state suitable for starting a
+ * task after a context restore operation.  Generally, this
+ * involves:
+ *
+ *    - setting a starting address
+ *    - preparing the stack
+ *    - preparing the stack and frame pointers
+ *    - setting the proper interrupt level in the context
+ *    - initializing the floating point context
+ *
+ * This routine generally does not set any unnecessary register
+ * in the context.  The state of the "general data" registers is
+ * undefined at task start time.
+ *
+ * The ISR dispatch disable field of the context must be cleared to zero if it
+ * is used by the CPU port.  Otherwise, a thread restart results in
+ * unpredictable behaviour.
+ *
+ * @param[in] _the_context is the context structure to be initialized
+ * @param[in] _stack_base is the lowest physical address of this task's stack
+ * @param[in] _size is the size of this task's stack
+ * @param[in] _isr is the interrupt disable level
+ * @param[in] _entry_point is the thread's entry point.  This is
+ *        always @a _Thread_Handler
+ * @param[in] _is_fp is TRUE if the thread is to be a floating
+ *       point thread.  This is typically only used on CPUs where the
+ *       FPU may be easily disabled by software such as on the SPARC
+ *       where the PSR contains an enable FPU bit.
+ * @param[in] _tls_area The thread-local storage (TLS) area.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+#define _CPU_Context_Initialize( _the_context, _stack_base, _size, \
+                                 _isr, _entry_point, _is_fp, _tls_area ) \
+  { \
+  }
+
+ */
+#define CPU_EFLAGS_INTERRUPTS_ON  0x00003202
+#define CPU_EFLAGS_INTERRUPTS_OFF 0x00003002
+
+#ifndef ASM
+
+void _CPU_Context_Initialize(
+  Context_Control *the_context,
+  void *stack_area_begin,
+  size_t stack_area_size,
+  uint32_t new_level,
+  void (*entry_point)( void ),
+  bool is_fp,
+  void *tls_area
+);
+
+#endif /* ASM */
+/**
+ * This routine is responsible for somehow restarting the currently
+ * executing task.  If you are lucky, then all that is necessary
+ * is restoring the context.  Otherwise, there will need to be
+ * a special assembly routine which does something special in this
+ * case.  For many ports, simply adding a label to the restore path
+ * of @ref _CPU_Context_switch will work.  On other ports, it may be
+ * possibly to load a few arguments and jump to the restore path. It will
+ * not work if restarting self conflicts with the stack frame
+ * assumptions of restoring a context.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#define _CPU_Context_Restart_self( _the_context ) \
+   _CPU_Context_restore( (_the_context) );
+
+/**
+ * This routine initializes the FP context area passed to it to.
+ * There are a few standard ways in which to initialize the
+ * floating point context.  The code included for this macro assumes
+ * that this is a CPU in which a "initial" FP context was saved into
+ * @a _CPU_Null_fp_context and it simply copies it to the destination
+ * context passed to it.
+ *
+ * Other floating point context save/restore models include:
+ *   -# not doing anything, and
+ *   -# putting a "null FP status word" in the correct place in the FP context.
+ *
+ * @param[in] _destination is the floating point context area
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+void _CPU_Context_Initialize_fp(Context_Control_fp **_dest );
+
+/* end of Context handler macros */
+
+/* Fatal Error manager macros */
+
+/**
+ * This routine copies _error into a known place -- typically a stack
+ * location or a register, optionally disables interrupts, and
+ * halts/stops the CPU.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+  /*
+#define _CPU_Fatal_halt( _source, _error ) \
+  { \
+  }
+*/
+/* end of Fatal Error manager macros */
+
+/* Bitfield handler macros */
+
+/**
+ * @defgroup CPUBitfield Processor Dependent Bitfield Manipulation
+ *
+ * This set of routines are used to implement fast searches for
+ * the most important ready task.
+ * 
+ */
+/**@{**/
+
+
+
+/**
+ * This routine sets @a _output to the bit number of the first bit
+ * set in @a _value.  @a _value is of CPU dependent type
+ * @a Priority_bit_map_Word.  This type may be either 16 or 32 bits
+ * wide although only the 16 least significant bits will be used.
+ *
+ * There are a number of variables in using a "find first bit" type
+ * instruction.
+ *
+ *   -# What happens when run on a value of zero?
+ *   -# Bits may be numbered from MSB to LSB or vice-versa.
+ *   -# The numbering may be zero or one based.
+ *   -# The "find first bit" instruction may search from MSB or LSB.
+ *
+ * RTEMS guarantees that (1) will never happen so it is not a concern.
+ * (2),(3), (4) are handled by the macros @ref _CPU_Priority_Mask and
+ * @ref _CPU_Priority_bits_index.  These three form a set of routines
+ * which must logically operate together.  Bits in the _value are
+ * set and cleared based on masks built by @ref _CPU_Priority_Mask.
+ * The basic major and minor values calculated by @ref _Priority_Major
+ * and @ref _Priority_Minor are "massaged" by @ref _CPU_Priority_bits_index
+ * to properly range between the values returned by the "find first bit"
+ * instruction.  This makes it possible for @ref _Priority_Get_highest to
+ * calculate the major and directly index into the minor table.
+ * This mapping is necessary to ensure that 0 (a high priority major/minor)
+ * is the first bit found.
+ *
+ * This entire "find first bit" and mapping process depends heavily
+ * on the manner in which a priority is broken into a major and minor
+ * components with the major being the 4 MSB of a priority and minor
+ * the 4 LSB.  Thus (0 << 4) + 0 corresponds to priority 0 -- the highest
+ * priority.  And (15 << 4) + 14 corresponds to priority 254 -- the next
+ * to the lowest priority.
+ *
+ * If your CPU does not have a "find first bit" instruction, then
+ * there are ways to make do without it.  Here are a handful of ways
+ * to implement this in software:
+ *
+@verbatim
+      - a series of 16 bit test instructions
+      - a "binary search using if's"
+      - _number = 0
+        if _value > 0x00ff
+          _value >>=8
+          _number = 8;
+
+        if _value > 0x0000f
+          _value >=8
+          _number += 4
+
+        _number += bit_set_table[ _value ]
+@endverbatim
+
+ *   where bit_set_table[ 16 ] has values which indicate the first
+ *     bit set
+ *
+ * @param[in] _value is the value to be scanned
+ * @param[in] _output is the first bit set
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+
+#if (CPU_USE_GENERIC_BITFIELD_CODE == FALSE)
+#define _CPU_Bitfield_Find_first_bit( _value, _output ) \
+  { \
+    (_output) = 0;   /* do something to prevent warnings */ \
+  }
+#endif
+
+/** @} */
+
+/* end of Bitfield handler macros */
+
+/**
+ * This routine builds the mask which corresponds to the bit fields
+ * as searched by @ref _CPU_Bitfield_Find_first_bit.  See the discussion
+ * for that routine.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#if (CPU_USE_GENERIC_BITFIELD_CODE == FALSE)
+
+#define _CPU_Priority_Mask( _bit_number ) \
+  ( 1 << (_bit_number) )
+
+#endif
+
+/**
+ * @ingroup CPUBitfield
+ * 
+ * This routine translates the bit numbers returned by
+ * @ref _CPU_Bitfield_Find_first_bit into something suitable for use as
+ * a major or minor component of a priority.  See the discussion
+ * for that routine.
+ *
+ * @param[in] _priority is the major or minor number to translate
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#if (CPU_USE_GENERIC_BITFIELD_CODE == FALSE)
+
+#define _CPU_Priority_bits_index( _priority ) \
+  (_priority)
+
+#endif
+
+/* end of Priority handler macros */
+
+/* functions */
+
+/**
+ * This routine performs CPU dependent initialization.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+void _CPU_Initialize(void);
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * This routine installs a "raw" interrupt handler directly into the
+ * processor's vector table.
+ *
+ * @param[in] vector is the vector number
+ * @param[in] new_handler is the raw ISR handler to install
+ * @param[in] old_handler is the previously installed ISR Handler
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+void _CPU_ISR_install_raw_handler(
+  uint32_t    vector,
+  proc_ptr    new_handler,
+  proc_ptr   *old_handler
+);
+
+/**
+ * @ingroup CPUInterrupt
+ * 
+ * This routine installs an interrupt vector.
+ *
+ * @param[in] vector is the vector number
+ * @param[in] new_handler is the RTEMS ISR handler to install
+ * @param[in] old_handler is the previously installed ISR Handler
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+/*void _CPU_ISR_install_vector(
+  uint32_t    vector,
+  proc_ptr    new_handler,
+  proc_ptr   *old_handler
+);
+*/
+/**
+ * @ingroup CPUInterrupt
+ * This routine installs the hardware interrupt stack pointer.
+ *
+ * NOTE:  It need only be provided if @ref CPU_HAS_HARDWARE_INTERRUPT_STACK
+ *        is TRUE.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+void _CPU_Install_interrupt_stack( void );
+
+/**
+ * This routine is the CPU dependent IDLE thread body.
+ *
+ * NOTE:  It need only be provided if @ref CPU_PROVIDES_IDLE_THREAD_BODY
+ *         is TRUE.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+void *_CPU_Thread_Idle_body( uintptr_t ignored );
+
+/**
+ * @ingroup CPUContext
+ * 
+ * This routine switches from the run context to the heir context.
+ *
+ * @param[in] run points to the context of the currently executing task
+ * @param[in] heir points to the context of the heir task
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+__attribute__ ((optimize(("-O3")))) void _CPU_Context_switch(
+  Context_Control  *run,
+  Context_Control  *heir
+);
+
+/**
+ * @ingroup CPUContext
+ * 
+ * This routine is generally used only to restart self in an
+ * efficient manner.  It may simply be a label in @ref _CPU_Context_switch.
+ *
+ * @param[in] new_context points to the context to be restored.
+ *
+ * NOTE: May be unnecessary to reload some registers.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+__attribute__ ((regparm(1))) void _CPU_Context_restore(
+  Context_Control *new_context
+) RTEMS_NO_RETURN;
+
+/**
+ * @ingroup CPUContext
+ * 
+ * This routine saves the floating point context passed to it.
+ *
+ * @param[in] fp_context_ptr is a pointer to a pointer to a floating
+ * point context area
+ *
+ * @return on output @a *fp_context_ptr will contain the address that
+ * should be used with @ref _CPU_Context_restore_fp to restore this context.
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+#ifdef __SSE__
+#define _CPU_Context_save_fp(fp_context_pp) \
+  do {                                      \
+    __asm__ __volatile__(                   \
+      "fstcw %0"                            \
+      :"=m"((*(fp_context_pp))->fpucw)      \
+    );                                      \
+  __asm__ __volatile__(                   \
+      "stmxcsr %0"                          \
+      :"=m"((*(fp_context_pp))->mxcsr)      \
+    );                                      \
+  } while (0)
+#else
+#endif
+
+#ifdef __SSE__
+#define _CPU_Context_restore_fp(fp_context_pp) \
+  do {                                         \
+    __asm__ __volatile__(                      \
+      "fldcw %0"                               \
+      ::"m"((*(fp_context_pp))->fpucw)         \
+      :"fpcr"                                  \
+    );                                         \
+    __builtin_ia32_ldmxcsr(_Thread_Executing->fp_context->mxcsr);  \
+  } while (0)
+#else
+#endif
+
+#ifdef __SSE__
+#define _CPU_Context_Initialization_at_thread_begin() \
+  do {                                                \
+    __asm__ __volatile__(                             \
+      "finit"                                         \
+      :                                               \
+      :                                               \
+      :"st","st(1)","st(2)","st(3)",                  \
+       "st(4)","st(5)","st(6)","st(7)",               \
+       "fpsr","fpcr"                                  \
+    );                                                \
+	if ( _Thread_Executing->fp_context ) {            \
+	  _CPU_Context_restore_fp(&_Thread_Executing->fp_context); \
+   }                                                  \
+  } while (0)
+#endif
+/**
+ * @ingroup CPUContext
+ *
+ * @brief Clobbers all volatile registers with values derived from the pattern
+ * parameter.
+ *
+ * This function is used only in test sptests/spcontext01.
+ *
+ * @param[in] pattern Pattern used to generate distinct register values.
+ *
+ * @see _CPU_Context_validate().
+ */
+void _CPU_Context_volatile_clobber( uintptr_t pattern );
+
+/**
+ * @ingroup CPUContext
+ *
+ * @brief Initializes and validates the CPU context with values derived from
+ * the pattern parameter.
+ *
+ * This function will not return if the CPU context remains consistent.  In
+ * case this function returns the CPU port is broken.
+ *
+ * This function is used only in test sptests/spcontext01.
+ *
+ * @param[in] pattern Pattern used to generate distinct register values.
+ *
+ * @see _CPU_Context_volatile_clobber().
+ */
+void _CPU_Context_validate( uintptr_t pattern );
+
+/**
+ * @brief The set of registers that specifies the complete processor state.
+ *
+ * The CPU exception frame may be available in fatal error conditions like for
+ * example illegal opcodes, instruction fetch errors, or data access errors.
+ *
+ * @see rtems_fatal(), RTEMS_FATAL_SOURCE_EXCEPTION, and
+ * rtems_exception_frame_print().
+ */
+typedef struct {
+  uint32_t processor_state_register;
+  uint32_t integer_registers [1];
+  double float_registers [1];
+} CPU_Exception_frame;
+
+/**
+ * @brief Prints the exception frame via printk().
+ *
+ * @see rtems_fatal() and RTEMS_FATAL_SOURCE_EXCEPTION.
+ */
+void _CPU_Exception_frame_print( const CPU_Exception_frame *frame );
+
+/**
+ * @ingroup CPUEndian
+ * 
+ * The following routine swaps the endian format of an unsigned int.
+ * It must be static because it is referenced indirectly.
+ *
+ * This version will work on any processor, but if there is a better
+ * way for your CPU PLEASE use it.  The most common way to do this is to:
+ *
+ *    swap least significant two bytes with 16-bit rotate
+ *    swap upper and lower 16-bits
+ *    swap most significant two bytes with 16-bit rotate
+ *
+ * Some CPUs have special instructions which swap a 32-bit quantity in
+ * a single instruction (e.g. i486).  It is probably best to avoid
+ * an "endian swapping control bit" in the CPU.  One good reason is
+ * that interrupts would probably have to be disabled to ensure that
+ * an interrupt does not try to access the same "chunk" with the wrong
+ * endian.  Another good reason is that on some CPUs, the endian bit
+ * endianness for ALL fetches -- both code and data -- so the code
+ * will be fetched incorrectly.
+ *
+ * @param[in] value is the value to be swapped
+ * @return the value after being endian swapped
+ *
+ * Port Specific Information:
+ *
+ * XXX document implementation including references if appropriate
+ */
+static inline uint32_t CPU_swap_u32(
+  uint32_t value
+)
+{
+  uint32_t byte1, byte2, byte3, byte4, swapped;
+
+  byte4 = (value >> 24) & 0xff;
+  byte3 = (value >> 16) & 0xff;
+  byte2 = (value >> 8)  & 0xff;
+  byte1 =  value        & 0xff;
+
+  swapped = (byte1 << 24) | (byte2 << 16) | (byte3 << 8) | byte4;
+  return swapped;
+}
+
+/**
+ * @ingroup CPUEndian
+ * 
+ * This routine swaps a 16 bir quantity.
+ *
+ * @param[in] value is the value to be swapped
+ * @return the value after being endian swapped
+ */
+#define CPU_swap_u16( value ) \
+  (((value&0xff) << 8) | ((value >> 8)&0xff))
+
+/**
+ * @brief Unsigned integer type for CPU counter values.
+ */
+typedef uint32_t CPU_Counter_ticks;
+
+/**
+ * @brief Returns the current CPU counter value.
+ *
+ * A CPU counter is some free-running counter.  It ticks usually with a
+ * frequency close to the CPU or system bus clock.  The board support package
+ * must ensure that this function works before the RTEMS initialization.
+ * Otherwise invalid profiling statistics will be gathered.
+ *
+ * @return The current CPU counter value.
+ */
+CPU_Counter_ticks _CPU_Counter_read( void );
+
+/**
+ * @brief Returns the difference between the second and first CPU counter
+ * value.
+ *
+ * This operation may be carried out as a modulo operation depending on the
+ * range of the CPU counter device.
+ *
+ * @param[in] second The second CPU counter value.
+ * @param[in] first The first CPU counter value.
+ *
+ * @return Returns second minus first modulo counter period.
+ */
+CPU_Counter_ticks _CPU_Counter_difference(
+  CPU_Counter_ticks second,
+  CPU_Counter_ticks first
+);
+
+#ifdef RTEMS_SMP
+  /**
+   * @brief Performs CPU specific SMP initialization in the context of the boot
+   * processor.
+   *
+   * This function is invoked on the boot processor during system
+   * initialization.  All interrupt stacks are allocated at this point in case
+   * the CPU port allocates the interrupt stacks.  This function is called
+   * before _CPU_SMP_Start_processor() or _CPU_SMP_Finalize_initialization() is
+   * used.
+   *
+   * @return The count of physically or virtually available processors.
+   * Depending on the configuration the application may use not all processors.
+   */
+  uint32_t _CPU_SMP_Initialize( void );
+
+  /**
+   * @brief Starts a processor specified by its index.
+   *
+   * This function is invoked on the boot processor during system
+   * initialization.
+   *
+   * This function will be called after _CPU_SMP_Initialize().
+   *
+   * @param[in] cpu_index The processor index.
+   *
+   * @retval true Successful operation.
+   * @retval false Unable to start this processor.
+   */
+  bool _CPU_SMP_Start_processor( uint32_t cpu_index );
+
+  /**
+   * @brief Performs final steps of CPU specific SMP initialization in the
+   * context of the boot processor.
+   *
+   * This function is invoked on the boot processor during system
+   * initialization.
+   *
+   * This function will be called after all processors requested by the
+   * application have been started.
+   *
+   * @param[in] cpu_count The minimum value of the count of processors
+   * requested by the application configuration and the count of physically or
+   * virtually available processors.
+   */
+  void _CPU_SMP_Finalize_initialization( uint32_t cpu_count );
+
+  /**
+   * @brief Prepares a CPU to start multitasking in terms of SMP.
+   *
+   * This function is invoked on all processors requested by the application
+   * during system initialization.
+   *
+   * This function will be called after all processors requested by the
+   * application have been started right before the context switch to the first
+   * thread takes place.
+   */
+  void _CPU_SMP_Prepare_start_multitasking( void );
+
+  /**
+   * @brief Returns the index of the current processor.
+   *
+   * An architecture specific method must be used to obtain the index of the
+   * current processor in the system.  The set of processor indices is the
+   * range of integers starting with zero up to the processor count minus one.
+   */
+  static inline uint32_t _CPU_SMP_Get_current_processor( void )
+  {
+    return 123;
+  }
+
+  /**
+   * @brief Sends an inter-processor interrupt to the specified target
+   * processor.
+   *
+   * This operation is undefined for target processor indices out of range.
+   *
+   * @param[in] target_processor_index The target processor index.
+   */
+  void _CPU_SMP_Send_interrupt( uint32_t target_processor_index );
+
+  /**
+   * @brief Broadcasts a processor event.
+   *
+   * Some architectures provide a low-level synchronization primitive for
+   * processors in a multi-processor environment.  Processors waiting for this
+   * event may go into a low-power state and stop generating system bus
+   * transactions.  This function must ensure that preceding store operations
+   * can be observed by other processors.
+   *
+   * @see _CPU_SMP_Processor_event_receive().
+   */
+  static inline void _CPU_SMP_Processor_event_broadcast( void )
+  {
+    __asm__ volatile ( "" : : : "memory" );
+  }
+
+  /**
+   * @brief Receives a processor event.
+   *
+   * This function will wait for the processor event and may wait forever if no
+   * such event arrives.
+   *
+   * @see _CPU_SMP_Processor_event_broadcast().
+   */
+  static inline void _CPU_SMP_Processor_event_receive( void )
+  {
+    __asm__ volatile ( "" : : : "memory" );
+  }
+
+  /**
+   * @brief Gets the is executing indicator of the thread context.
+   *
+   * @param[in] context The context.
+   */
+  static inline bool _CPU_Context_Get_is_executing(
+    const Context_Control *context
+  )
+  {
+    return context->is_executing;
+  }
+
+  /**
+   * @brief Sets the is executing indicator of the thread context.
+   *
+   * @param[in] context The context.
+   * @param[in] is_executing The new value for the is executing indicator.
+   */
+  static inline void _CPU_Context_Set_is_executing(
+    Context_Control *context,
+    bool is_executing
+  )
+  {
+    context->is_executing = is_executing;
+  }
+#endif /* RTEMS_SMP */
+
+#endif /* ASM */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

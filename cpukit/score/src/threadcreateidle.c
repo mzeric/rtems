@@ -76,6 +76,7 @@ static void _Thread_Create_idle_for_CPU( Per_CPU_Control *cpu )
   idle->Start.Entry.adaptor = _Thread_Entry_adaptor_idle;
   idle->Start.Entry.Kinds.Idle.entry = rtems_configuration_get_idle_task();
 
+  printk("begin thread_load_env %x\n", idle);
   _Thread_Load_environment( idle );
 
   idle->current_state = STATES_READY;

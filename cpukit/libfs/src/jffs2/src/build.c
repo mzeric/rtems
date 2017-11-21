@@ -10,7 +10,8 @@
  *
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+//#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+#define pr_fmt(fmt) "JFFS2" ": " fmt
 
 #include <linux/kernel.h>
 #include <linux/sched.h>

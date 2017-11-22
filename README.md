@@ -20,6 +20,7 @@ menuentry "rtems"{
 
 
 ```
+
 ![qemuserial](https://github.com/mzeric/rtems-x86_64/raw/master/doc/qemu_serial.png)
 
 # Support Status

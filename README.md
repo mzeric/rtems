@@ -3,6 +3,15 @@ run examples-v2/hello/hello_world_c in qemu
 
 ![qemuserial](https://github.com/mzeric/rtems-x86_64/raw/master/doc/qemu_serial.png)
 
+
+# Current Progress
+
+# How to Build
+
+## build toolchains
+use rtems-source-builder to build x86_64-rtems5-xxx
+
+
 This is the Real-Time Executive for Multiprocessing Systems (RTEMS).
 The version number for this software is indicated in the VERSION file.
 

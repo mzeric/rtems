@@ -5,6 +5,21 @@
 # run demo
 run examples-v2/hello/hello_world_c in qemu
 
+boot with grub multiboot
+
+```
+set timeout=1
+set default=0
+
+menuentry "rtems"{
+
+	multiboot /osloader
+	module /hello.exe
+	boot
+}
+
+
+```
 ![qemuserial](https://github.com/mzeric/rtems-x86_64/raw/master/doc/qemu_serial.png)
 
 # Support Status

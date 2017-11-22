@@ -1,3 +1,7 @@
+# run demo
+run examples-v2/hello/hello_world_c in qemu
+![qemu serial](https://github.com/mzeric/rtems-x86_64/blob/master/doc/qemu_serial.png)
+
 This is the Real-Time Executive for Multiprocessing Systems (RTEMS).
 The version number for this software is indicated in the VERSION file.
 

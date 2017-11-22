@@ -1,14 +1,23 @@
+# Why x86_64
+* new CPU support virtualization
+* high performance
+* total new cpu model from i386 model
 # run demo
 run examples-v2/hello/hello_world_c in qemu
 
 ![qemuserial](https://github.com/mzeric/rtems-x86_64/raw/master/doc/qemu_serial.png)
 
+# Support Status
 
-# Current Progress
+* x86_64 bsp
+* multithread
+* pass All RTEMS testsuites
 
-# How to Build
+# TODO
 
-## build toolchains
+# Build Toolchains 
+
+## rtems-source-builder
 use rtems-source-builder to build x86_64-rtems5-xxx
 
 

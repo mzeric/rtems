@@ -38,9 +38,11 @@ build the toolchain
 ```
 cd rtems-source-builder
 cd rtems
-../source-builder/sb-ser-builder --prefix=/opt/rtems/toolchains/x86_64 5/rtems-x86_64
+../source-builder/sb-set-builder --prefix=/opt/rtems/toolchains/x86_64 5/rtems-x86_64
 
 ```
+
+add "/opt/rtems/toolchains/x86_64/bin" to $PATH
 
 bootstrap the source
 

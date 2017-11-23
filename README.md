@@ -2,7 +2,7 @@
 * new CPU support virtualization
 * high performance
 * total new cpu model from i386 model
-# run demo
+## run demo
 run examples-v2/hello/hello_world_c in qemu
 
 boot with grub multiboot
@@ -23,17 +23,41 @@ menuentry "rtems"{
 
 ![qemuserial](https://github.com/mzeric/rtems-x86_64/raw/master/doc/qemu_serial.png)
 
-# Support Status
+## Support Status
 
 * x86_64 bsp
 * multithread
 * pass All RTEMS testsuites
 
-# TODO
 
-# Build Toolchains 
+## Build
 
-## rtems-source-builder
+build the toolchain
+
+```
+cd rtems-source-builder
+cd rtems
+../source-builder/sb-ser-builder --prefix=/opt/rtems/toolchains/x86_64 5/rtems-x86_64
+
+```
+
+bootstrap the source
+
+```
+cd rtems-x86_64
+./bootstrap -c && ./bootstrap -p
+../rtems-source-builder/source-builder/sb-bootstrap
+```
+
+build rtems
+
+```
+mkdir build
+cd build
+../rtems/configure --prefix=/opt/rtems/x86_64 --target=x86_64-rtems5 --disable-cxx
+```
+
+### rtems-source-builder
 use rtems-source-builder to build x86_64-rtems5-xxx
 
 
@@ -61,3 +85,4 @@ discussions:
 See https://devel.rtems.org/ to view existing or file a new issue
 report ticket.
 
+## TODO

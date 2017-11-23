@@ -7,6 +7,7 @@ run examples-v2/hello/hello_world_c in qemu
 
 boot with grub multiboot
 
+the osloader :  https://github.com/mzeric/osloader
 ```
 set timeout=1
 set default=0
